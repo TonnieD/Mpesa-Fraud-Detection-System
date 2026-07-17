@@ -15,16 +15,14 @@ def preprocessing(df):
         df['device_type'] = df['device_type'].map({'smartphone': 0, 'feature': 1})
         return df
 
+    def encode():
+        import joblib
+        encoder = joblib.load('../models/encoder.pkl')   #Load encoder
+        encoded_data = encoder.transform(df)   #Apply onehot encoder
+
+        return encoded_data
+
     df = columns_dropper()
     df = device_mapper()
 
-    return df
-
-def encode(df):
-    import joblib
-    encoder = joblib.load('../models/encoder.pkl')   #Load encoder
-    encoded_data = encoder.transform(df)   #Apply onehot encoder
-    
-    return encoded_data
-
-
+    return encode()
