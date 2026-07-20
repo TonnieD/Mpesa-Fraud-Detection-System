@@ -8,13 +8,20 @@ import joblib
 from utils.preprocessing import preprocessing
 from utils.feature_engineering import feature_engineering
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # loads .env file into environment
+
+HOST = os.getenv('HOST', '0.0.0.0')
+PORT = int(os.getenv('PORT', 8000))
 
 
 #App initialization
 app = FastAPI()
 
 #Model & Encoder loading
-model = joblib.load('../models/best_model.pkl')
+model = joblib.load('models/best_model.pkl')
 
 #Pydantic Request Model
 class TransactionRequest(BaseModel):
@@ -52,14 +59,16 @@ async def predict(request:TransactionRequest):
         df = feature_engineering(df)
 
         #Check_hard coded rules
-        if df['account_emptied'].values[0] == 1:
-            return TransactionResponse(risk_tier = 'HIGH',
-            recommended_action = 'BLOCK',
-            action_rationale = 'Account Will Be Emptied')
-        elif df['drain_rate'].values[0] >= 100:
+        if df['drain_rate'].values[0] >= 100:
             return TransactionResponse(risk_tier = 'HIGH',
             recommended_action = 'BLOCK',
             action_rationale = 'Transaction Exceeds Available Balance')
+        elif df['account_emptied'].values[0] == 1:
+            return TransactionResponse(risk_tier = 'HIGH',
+            recommended_action = 'BLOCK',
+            action_rationale = 'Account Will Be Emptied')
+
+            
 
         # Preprocess the data
         df = preprocessing(df)
@@ -92,4 +101,4 @@ async def predict(request:TransactionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host=HOST, port=PORT)
