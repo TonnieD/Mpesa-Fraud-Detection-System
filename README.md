@@ -16,64 +16,45 @@ Common attack vectors include SIM swaps, social engineering, fraudulent merchant
 
 Rather than logging fraud after the fact, this system sits **between transaction initiation and transaction completion**, scoring each transaction in real time and returning one of three decisions:
 
-
-|
- Decision 
-|
- Condition 
-|
-|
----
-|
----
-|
-|
-`ALLOW`
-|
- Low fraud probability — transaction proceeds normally 
-|
-|
-`CHALLENGE`
-|
- Elevated risk — OTP or user verification triggered 
-|
-|
-`BLOCK`
-|
- High fraud probability or deterministic fraud signal — transaction halted before settlement 
-|
+| Decision | Condition |
+|---|---|
+| `ALLOW` | Low fraud probability — transaction proceeds normally |
+| `CHALLENGE` | Elevated risk — OTP or user verification triggered |
+| `BLOCK` | High fraud probability or deterministic fraud signal — transaction halted before settlement |
 
 ---
 
 ## Project Structure
 
+```text
 Mpesa-Fraud-Detection-System/
 ├── Data/
-│ ├── mpesa_synthetic.csv — Raw dataset (120K synthetic M-Pesa transactions)
-│ ├── Feature_engineered.csv — Engineered dataset
-│ ├── training.csv — Training split (109,915 rows)
-│ └── evaluation.csv — Unseen evaluation set (10,000 rows)
+│   ├── mpesa_synthetic.csv — Raw dataset (120K synthetic M-Pesa transactions)
+│   ├── Feature_engineered.csv — Engineered dataset
+│   ├── training.csv — Training split (109,915 rows)
+│   └── evaluation.csv — Unseen evaluation set (10,000 rows)
 ├── inference/
-│ ├── models/
-│ │ ├── best_model.pkl — Trained XGBoost model (GridSearchCV tuned)
-│ │ └── encoder.pkl — Fitted ColumnTransformer encoder
-│ ├── utils/
-│ │ ├── feature_engineering.py — Derives drain_rate, account_emptied, cyclic encoding
-│ │ └── preprocessing.py — Drops columns, maps device_type, applies encoder
-│ ├── main.py — FastAPI application
-│ ├── requirements.txt — Production dependencies
-│ ├── .env — Local environment variables (not pushed)
-│ └── .gitignore
+│   ├── models/
+│   │   ├── best_model.pkl — Trained XGBoost model (GridSearchCV tuned)
+│   │   └── encoder.pkl — Fitted ColumnTransformer encoder
+│   ├── utils/
+│   │   ├── feature_engineering.py — Derives drain_rate, account_emptied, cyclic encoding
+│   │   └── preprocessing.py — Drops columns, maps device_type, applies encoder
+│   ├── main.py — FastAPI application
+│   ├── requirements.txt — Production dependencies
+│   ├── .env — Local environment variables (not pushed)
+│   └── .gitignore
 ├── Notebooks/
-│ ├── EDA.ipynb — Exploratory data analysis
-│ ├── feature_engineering.ipynb — Feature engineering pipeline
-│ └── modeling.ipynb — Model training, tuning, and evaluation
+│   ├── EDA.ipynb — Exploratory data analysis
+│   ├── feature_engineering.ipynb — Feature engineering pipeline
+│   └── modeling.ipynb — Model training, tuning, and evaluation
 ├── Reports/
-│ ├── transactions.pbix — Power BI dashboard
-│ ├── transactions.png — Transaction analysis dashboard
-│ └── fraud.png — Fraud analysis dashboard
+│   ├── transactions.pbix — Power BI dashboard
+│   ├── transactions.png — Transaction analysis dashboard
+│   └── fraud.png — Fraud analysis dashboard
 ├── render.yaml — Render deployment configuration
 └── README.md
+```
 
 
 ---
@@ -145,16 +126,18 @@ Transactions are evaluated in two layers before a decision is returned:
 
 ### Health Check
 
-GET /health_status
+`GET /health_status`
 
+**Response:**
 ```json
-{"status": "OK"}
+{
+  "status": "OK"
+}
 ```
 
 ### Predict
 
-POST /predict
-
+`POST /predict`
 
 **Request Body:**
 ```json
