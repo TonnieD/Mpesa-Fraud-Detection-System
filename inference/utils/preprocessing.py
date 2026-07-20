@@ -17,7 +17,7 @@ def preprocessing(df):
 
     def encode():
         import joblib
-        encoder = joblib.load('../models/encoder.pkl')   #Load encoder
+        encoder = joblib.load('models/encoder.pkl')   #Load encoder
         encoded_data = encoder.transform(df)   #Apply onehot encoder
 
         return encoded_data
