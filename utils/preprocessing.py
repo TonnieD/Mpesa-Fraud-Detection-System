@@ -8,7 +8,7 @@ def preprocessing(df):
         columns_to_drop = ['transaction_id', 'hour', 'day_of_week', 'month_2026', 'day',
                             'sender_balance_after', 'receiver_balance_before',
                             'receiver_balance_after']
-        df.drop(columns=columns_to_drop, inplace=True)
+        df.drop(columns=columns_to_drop, inplace=True, errors='ignore')
         return df
     
     def device_mapper():
