@@ -138,7 +138,6 @@ export default function SinglePrediction() {
     }, 3000);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://mpesa-fraud-detection-system.onrender.com";
       const payload = {
         transaction_id: formData.transaction_id,
         amount: parseFloat(formData.amount),
@@ -151,7 +150,7 @@ export default function SinglePrediction() {
         month_2026: parseInt(formData.month_2026),
       };
 
-      const response = await fetch(`${baseUrl}/predict`, {
+      const response = await fetch("/api/predict", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -164,16 +163,18 @@ export default function SinglePrediction() {
       setLoading(false);
 
       if (!response.ok) {
-        throw new Error("HTTP error status code: " + response.status);
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || "Server response error status: " + response.status);
       }
 
       const resData: PredictResponse = await response.json();
       setResult(resData);
     } catch (err: any) {
+      console.error("Single prediction error:", err);
       clearTimeout(timer);
       setShowColdStart(false);
       setLoading(false);
-      setApiError("Something went wrong. Please check your inputs and try again.");
+      setApiError(err.message || "Unable to connect to prediction engine. Please check your inputs and try again.");
     }
   };
 

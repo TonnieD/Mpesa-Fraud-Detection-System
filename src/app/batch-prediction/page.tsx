@@ -283,7 +283,7 @@ export default function BatchPrediction() {
         const row = rowsToScore[currentIndex];
 
         try {
-          const res = await fetch(`${baseUrl}/predict`, {
+          const res = await fetch("/api/predict", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(row),

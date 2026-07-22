@@ -1,5 +1,6 @@
 #Library importations
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 import pandas as pd
@@ -19,6 +20,14 @@ PORT = int(os.getenv('PORT', 8000))
 
 #App initialization
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 #Model & Encoder loading
 model = joblib.load('models/best_model.pkl')
