@@ -16,23 +16,11 @@ import {
   Legend, 
   ResponsiveContainer 
 } from "recharts";
-import { Upload, RefreshCw, AlertTriangle } from "lucide-react";
+import { Upload, RefreshCw, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
-
-const REQUIRED_COLUMNS = [
-  "amount", "sender_balance_before", "transaction_type", "device_type", "region", 
-  "hour", "day_of_week", "month_2026", "is_fraud", "drain_rate", "account_emptied", 
-  "hour_sin", "hour_cos", "day_sin", "day_cos", "month_2026_sin", "month_2026_cos"
-];
+import { validateAndProcessCSV, SchemaValidationResult } from "@/utils/csvProcessor";
 
 const MAX_UPLOAD_ROWS = 1000;
-
-// Helper to validate CSV columns
-const validateColumns = (firstRow: any): string[] => {
-  if (!firstRow) return REQUIRED_COLUMNS;
-  const keys = Object.keys(firstRow).map(k => k.trim().toLowerCase());
-  return REQUIRED_COLUMNS.filter(col => !keys.includes(col.toLowerCase()));
-};
 
 // Formatting helpers
 const formatAmount = (amount: number) => {
@@ -50,6 +38,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [validationReport, setValidationReport] = useState<SchemaValidationResult | null>(null);
   const [activeDatasetLabel, setActiveDatasetLabel] = useState("Training Dataset");
   const [isMounted, setIsMounted] = useState(false);
 
@@ -61,6 +50,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
+      setValidationReport(null);
       setActiveDatasetLabel("Training Dataset");
       setLoadingProgress("Fetching default Training Dataset...");
       
@@ -84,13 +74,16 @@ export default function Dashboard() {
             setLoading(false);
             return;
           }
-          const missing = validateColumns(rows[0]);
-          if (missing.length > 0) {
-            setError(`Default dataset is missing required columns: ${missing.join(", ")}`);
+
+          const validation = validateAndProcessCSV(rows, false);
+          if (!validation.isValid) {
+            setValidationReport(validation);
+            setError("Default dataset failed validation schema checks.");
             setLoading(false);
             return;
           }
-          setData(rows);
+
+          setData(validation.processedRows);
           setLoading(false);
         },
         error: (err: any) => {
@@ -116,13 +109,14 @@ export default function Dashboard() {
 
     setLoading(true);
     setError(null);
+    setValidationReport(null);
     setLoadingProgress(`Reading ${file.name}...`);
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
-        setLoadingProgress("Validating schemas and mapping features...");
+        setLoadingProgress("Validating schema and feature engineering raw data...");
 
         const Papa = await import("papaparse");
         Papa.parse(text, {
@@ -137,18 +131,25 @@ export default function Dashboard() {
               return;
             }
             if (rows.length > MAX_UPLOAD_ROWS) {
-              setError(`Upload limit exceeded: File contains ${rows.length} rows. Upload size is restricted to a maximum of ${MAX_UPLOAD_ROWS.toLocaleString()} rows for dashboard EDA.`);
+              setError(`Upload limit exceeded: File contains ${rows.length.toLocaleString()} rows. Maximum allowed is ${MAX_UPLOAD_ROWS.toLocaleString()} rows for dashboard EDA.`);
               setLoading(false);
               return;
             }
-            const missing = validateColumns(rows[0]);
-            if (missing.length > 0) {
-              setError(`Uploaded file is missing required columns: ${missing.join(", ")}`);
+
+            const validation = validateAndProcessCSV(rows, false);
+            if (!validation.isValid) {
+              setValidationReport(validation);
+              setError(`Dataset schema validation failed for "${file.name}".`);
               setLoading(false);
               return;
             }
-            setData(rows);
-            setActiveDatasetLabel(`Custom Dataset (${file.name})`);
+
+            setData(validation.processedRows);
+            const formatText = validation.formatDetected === "RAW_SYNTHETIC" 
+              ? "Raw Synthetic (Auto Engineered)" 
+              : "Clean Engineered";
+            setActiveDatasetLabel(`${file.name} [${formatText}]`);
+            setValidationReport(validation);
             setLoading(false);
           },
           error: (err: any) => {
@@ -166,7 +167,7 @@ export default function Dashboard() {
 
   // Aggregations
   const totalTx = data.length;
-  const fraudTx = data.filter(d => d.is_fraud === 1 || d.is_fraud === true).length;
+  const fraudTx = data.filter(d => d.is_fraud === 1 || d.is_fraud === true || d.is_fraud === "1").length;
   const fraudRate = totalTx > 0 ? (fraudTx / totalTx) * 100 : 0;
   
   const totalAmount = data.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
@@ -208,7 +209,7 @@ export default function Dashboard() {
   ];
   data.forEach(d => {
     const val = Number(d.drain_rate) || 0;
-    const isF = d.is_fraud === 1 || d.is_fraud === true;
+    const isF = d.is_fraud === 1 || d.is_fraud === true || d.is_fraud === "1";
     for (const b of drainBuckets) {
       if (val >= b.min && val < b.max) {
         b.total++;
@@ -233,7 +234,7 @@ export default function Dashboard() {
   ];
   data.forEach(d => {
     const val = Number(d.amount) || 0;
-    const isF = d.is_fraud === 1 || d.is_fraud === true;
+    const isF = d.is_fraud === 1 || d.is_fraud === true || d.is_fraud === "1";
     for (const b of amtBracketBuckets) {
       if (val >= b.min && val < b.max) {
         b.total++;
@@ -283,7 +284,7 @@ export default function Dashboard() {
             Transaction Analytics Dashboard
           </h1>
           <p className="text-gray-500 mt-1">
-            Exploratory Data Analysis (EDA) based on the model&apos;s Training Dataset
+            Exploratory Data Analysis (EDA) supporting Clean Engineered and Raw Synthetic M-Pesa CSV Formats
           </p>
         </div>
 
@@ -315,13 +316,76 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Error Alert Box */}
+      {/* Format Detection Badge */}
+      {validationReport && validationReport.isValid && (
+        <div className="bg-green-50 border border-[#4CAF50]/30 p-4 rounded-xl flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-5 w-5 text-[#1B5E20]" />
+            <div>
+              <p className="text-sm font-bold text-[#1B5E20]">
+                {validationReport.formatDetected === "RAW_SYNTHETIC"
+                  ? "Raw Synthetic Dataset Detected — Automated Feature Engineering Applied"
+                  : "Clean Engineered Dataset Format Validated"
+                }
+              </p>
+              <p className="text-xs text-gray-600 font-medium">
+                System processed {data.length.toLocaleString()} rows into required model features.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Alert Box with Detailed Schema Breakdown */}
       {error && (
-        <div className="bg-red-50 border-l-4 border-[#DC2626] p-4 rounded-xl flex items-start gap-3 animate-fade-in shadow-sm">
-          <AlertTriangle className="h-5 w-5 text-[#DC2626] flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-red-800">Dataset Validation Error</h3>
-            <p className="text-red-700 text-sm mt-1 font-medium">{error}</p>
+        <div className="bg-red-50 border border-red-200 p-6 rounded-2xl space-y-4 shadow-sm animate-fade-in">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-[#DC2626] flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-red-800 text-base">Dataset Validation Error</h3>
+              <p className="text-red-700 text-sm mt-1 font-medium">{error}</p>
+            </div>
+          </div>
+
+          {/* Missing Required Columns */}
+          {validationReport && validationReport.missingColumns.length > 0 && (
+            <div className="pl-9 space-y-2">
+              <p className="text-xs font-bold text-red-900 uppercase tracking-wider">
+                ❌ Missing Required Columns (Must be added to CSV):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {validationReport.missingColumns.map(col => (
+                  <span key={col} className="text-xs bg-red-100 border border-red-300 text-red-800 px-2.5 py-1 rounded-md font-bold">
+                    + {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Unneeded / Extra Columns */}
+          {validationReport && validationReport.unneededColumns.length > 0 && (
+            <div className="pl-9 space-y-2 border-t border-red-200/60 pt-3">
+              <p className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                ⚠️ Unneeded / Extra Columns (Should be removed from CSV):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {validationReport.unneededColumns.map(col => (
+                  <span key={col} className="text-xs bg-amber-100 border border-amber-300 text-amber-900 px-2.5 py-1 rounded-md font-bold">
+                    - {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="pl-9 pt-2">
+            <button
+              onClick={loadDefaultData}
+              className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-semibold px-4 py-2 rounded-lg text-xs transition-all shadow-sm cursor-pointer"
+            >
+              Reset to Default Training Dataset
+            </button>
           </div>
         </div>
       )}
@@ -332,7 +396,7 @@ export default function Dashboard() {
           <div className="bg-white border border-gray-100 p-8 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm">
             <div className="h-10 w-10 border-4 border-[#A5D6A7] border-t-[#1B5E20] rounded-full animate-spin mb-4" />
             <p className="text-lg font-semibold text-[#1A1A1A]">{loadingProgress}</p>
-            <p className="text-sm text-gray-500 mt-1">Processing Training Dataset in your browser environment</p>
+            <p className="text-sm text-gray-500 mt-1">Processing dataset in browser memory</p>
           </div>
           <LoadingSkeleton />
         </div>
@@ -345,7 +409,7 @@ export default function Dashboard() {
               <h3 className="text-3xl font-extrabold text-[#1A1A1A] mt-2">
                 {totalTx.toLocaleString()}
               </h3>
-              <p className="text-xs text-gray-400 mt-2 font-medium">Training Dataset footprint</p>
+              <p className="text-xs text-gray-400 mt-2 font-medium">Dataset footprint</p>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">

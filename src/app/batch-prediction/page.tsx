@@ -3,20 +3,23 @@
 import { useState, useRef } from "react";
 import { 
   Upload, 
-  FileSpreadsheet, 
   CheckCircle, 
   XCircle, 
   Play, 
   Download, 
   AlertTriangle, 
   Trash2,
-  Clock 
+  Clock,
+  Sparkles
 } from "lucide-react";
+import { validateAndProcessCSV } from "@/utils/csvProcessor";
 
 interface ValidationResult {
   validRows: any[];
   flaggedRows: { rowNumber: number; data: any; errors: string[] }[];
   missingColumns: string[];
+  unneededColumns: string[];
+  formatDetected: "CLEAN_ENGINEERED" | "RAW_SYNTHETIC" | "INVALID";
 }
 
 const REQUIRED_BATCH_COLUMNS = [
@@ -79,7 +82,7 @@ export default function BatchPrediction() {
     }
   };
 
-  // CSV parsing and row validation
+  // CSV parsing, schema checking, automated feature engineering, and row validation
   const processCSV = (file: File) => {
     setError(null);
     setValidation(null);
@@ -108,51 +111,38 @@ export default function BatchPrediction() {
               return;
             }
 
-            // Headers validation (case-insensitive)
-            const headers = Object.keys(rawRows[0]).map(h => h.trim().toLowerCase());
-            const missing = REQUIRED_BATCH_COLUMNS.filter(
-              col => !headers.includes(col.toLowerCase())
-            );
+            // Perform schema validation and automatic feature engineering
+            const schemaResult = validateAndProcessCSV(rawRows, true);
 
-            if (missing.length > 0) {
+            if (!schemaResult.isValid) {
               setValidation({
                 validRows: [],
                 flaggedRows: [],
-                missingColumns: missing
+                missingColumns: schemaResult.missingColumns,
+                unneededColumns: schemaResult.unneededColumns,
+                formatDetected: schemaResult.formatDetected
               });
               return;
             }
 
-            // Map header aliases
-            const canonicalHeadersMap: { [key: string]: string } = {};
-            const firstRowKeys = Object.keys(rawRows[0]);
-            firstRowKeys.forEach(k => {
-              const matched = REQUIRED_BATCH_COLUMNS.find(c => c.toLowerCase() === k.trim().toLowerCase());
-              if (matched) {
-                canonicalHeadersMap[matched] = k;
-              }
-            });
-
+            const engineeredRows = schemaResult.processedRows;
             const validRows: any[] = [];
             const flaggedRows: any[] = [];
 
-            rawRows.forEach((row, index) => {
+            engineeredRows.forEach((row, index) => {
               const rowErrors: string[] = [];
-              const normalizedRow: any = {};
+              const normalizedRow: any = { ...row };
 
               // 1. Transaction ID
-              const txIdKey = canonicalHeadersMap["transaction_id"];
-              const txId = row[txIdKey] ? row[txIdKey].toString().trim() : "";
+              const txId = row.transaction_id ? row.transaction_id.toString().trim() : "";
               if (!txId) {
                 rowErrors.push("Transaction ID is missing");
               }
               normalizedRow.transaction_id = txId;
 
               // 2. Amount
-              const amtKey = canonicalHeadersMap["amount"];
-              const amtVal = row[amtKey];
-              const amt = Number(amtVal);
-              if (amtVal === undefined || amtVal === null || amtVal === "" || isNaN(amt)) {
+              const amt = Number(row.amount);
+              if (row.amount === undefined || row.amount === null || row.amount === "" || isNaN(amt)) {
                 rowErrors.push("Amount must be numeric");
               } else if (amt < 1) {
                 rowErrors.push("Amount must be >= 1");
@@ -160,10 +150,8 @@ export default function BatchPrediction() {
               normalizedRow.amount = amt;
 
               // 3. Sender Balance Before
-              const balKey = canonicalHeadersMap["sender_balance_before"];
-              const balVal = row[balKey];
-              const bal = Number(balVal);
-              if (balVal === undefined || balVal === null || balVal === "" || isNaN(bal)) {
+              const bal = Number(row.sender_balance_before);
+              if (row.sender_balance_before === undefined || row.sender_balance_before === null || row.sender_balance_before === "" || isNaN(bal)) {
                 rowErrors.push("Sender balance before must be numeric");
               } else if (bal <= 0) {
                 rowErrors.push("Sender balance must be > 0");
@@ -171,51 +159,43 @@ export default function BatchPrediction() {
               normalizedRow.sender_balance_before = bal;
 
               // 4. Transaction Type
-              const typeKey = canonicalHeadersMap["transaction_type"];
-              const rawType = row[typeKey] ? row[typeKey].toString().trim().toLowerCase() : "";
+              const rawType = row.transaction_type ? row.transaction_type.toString().trim().toLowerCase() : "";
               if (!VALID_TYPES.includes(rawType)) {
                 rowErrors.push(`Transaction type must be one of: ${VALID_TYPES.join(", ")}`);
               }
               normalizedRow.transaction_type = rawType;
 
               // 5. Device Type
-              const deviceKey = canonicalHeadersMap["device_type"];
-              const rawDevice = row[deviceKey] ? row[deviceKey].toString().trim().toLowerCase() : "";
+              const rawDevice = row.device_type ? row.device_type.toString().trim().toLowerCase() : "";
               if (!VALID_DEVICES.includes(rawDevice)) {
                 rowErrors.push(`Device type must be one of: ${VALID_DEVICES.join(", ")}`);
               }
               normalizedRow.device_type = rawDevice;
 
               // 6. Region
-              const regionKey = canonicalHeadersMap["region"];
-              const rawRegion = row[regionKey] ? capitalizeWord(row[regionKey].toString().trim()) : "";
+              const rawRegion = row.region ? capitalizeWord(row.region.toString().trim()) : "";
               if (!VALID_REGIONS.includes(rawRegion)) {
                 rowErrors.push(`Region must be one of: ${VALID_REGIONS.join(", ")}`);
               }
               normalizedRow.region = rawRegion;
 
               // 7. Hour
-              const hourKey = canonicalHeadersMap["hour"];
-              const hrVal = row[hourKey];
-              const hr = parseInt(hrVal);
-              if (hrVal === undefined || hrVal === null || hrVal === "" || isNaN(hr) || hr < 0 || hr > 23) {
+              const hr = parseInt(row.hour);
+              if (row.hour === undefined || row.hour === null || row.hour === "" || isNaN(hr) || hr < 0 || hr > 23) {
                 rowErrors.push("Hour must be between 0 and 23");
               }
               normalizedRow.hour = hr;
 
               // 8. Day of Week
-              const dayKey = canonicalHeadersMap["day_of_week"];
-              const rawDay = row[dayKey] ? capitalizeWord(row[dayKey].toString().trim()) : "";
+              const rawDay = row.day_of_week ? capitalizeWord(row.day_of_week.toString().trim()) : "";
               if (!VALID_DAYS.includes(rawDay)) {
                 rowErrors.push(`Day of week must be one of: ${VALID_DAYS.join(", ")}`);
               }
               normalizedRow.day_of_week = rawDay;
 
               // 9. Month
-              const monthKey = canonicalHeadersMap["month_2026"];
-              const mthVal = row[monthKey];
-              const mth = parseInt(mthVal);
-              if (mthVal === undefined || mthVal === null || mthVal === "" || isNaN(mth) || mth < 1 || mth > 12) {
+              const mth = parseInt(row.month_2026);
+              if (row.month_2026 === undefined || row.month_2026 === null || row.month_2026 === "" || isNaN(mth) || mth < 1 || mth > 12) {
                 rowErrors.push("Month must be between 1 and 12");
               }
               normalizedRow.month_2026 = mth;
@@ -234,7 +214,9 @@ export default function BatchPrediction() {
             setValidation({
               validRows,
               flaggedRows,
-              missingColumns: []
+              missingColumns: schemaResult.missingColumns,
+              unneededColumns: schemaResult.unneededColumns,
+              formatDetected: schemaResult.formatDetected
             });
           },
           error: (err: any) => {
@@ -261,7 +243,6 @@ export default function BatchPrediction() {
     setScoringProgress({ current: 0, total });
 
     const scoredResults: any[] = [];
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://mpesa-fraud-detection-system.onrender.com";
     
     // Concurrency Scheduler variables
     const CONCURRENCY_LIMIT = 5;
@@ -389,7 +370,7 @@ export default function BatchPrediction() {
           Batch Transaction Scoring
         </h1>
         <p className="text-gray-500 mt-1">
-          Upload a CSV of transactions and score them all concurrently against the predictive API
+          Upload a CSV in <span className="font-semibold text-gray-700">Raw Synthetic M-Pesa</span> format or <span className="font-semibold text-gray-700">Clean Engineered</span> format for real-time scoring
         </p>
       </div>
 
@@ -420,13 +401,21 @@ export default function BatchPrediction() {
           </span>
           
           <div className="mt-6 border-t border-gray-100 pt-4 w-full max-w-md text-left">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 text-center">Required Schema Fields</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {REQUIRED_BATCH_COLUMNS.map(col => (
-                <span key={col} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded font-medium">
-                  {col}
-                </span>
-              ))}
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 text-center">Supported CSV Formats</p>
+            <div className="flex flex-col gap-2">
+              <div className="bg-[#FAFAFA] border border-gray-200 p-2.5 rounded-lg text-xs">
+                <span className="font-bold text-gray-800 block mb-1">1. Raw Synthetic M-Pesa Format (Auto-engineered):</span>
+                <p className="text-gray-500 font-mono text-[11px] overflow-x-auto whitespace-nowrap">
+                  transaction_id, amount, sender_balance_before, transaction_type, device_type, region, hour, day_of_week, month_2026
+                </p>
+              </div>
+
+              <div className="bg-[#FAFAFA] border border-gray-200 p-2.5 rounded-lg text-xs">
+                <span className="font-bold text-gray-800 block mb-1">2. Clean Engineered Format:</span>
+                <p className="text-gray-500 font-mono text-[11px] overflow-x-auto whitespace-nowrap">
+                  Includes raw fields + drain_rate, account_emptied, hour_sin, hour_cos, day_sin, day_cos, month_2026_sin, month_2026_cos
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -443,29 +432,55 @@ export default function BatchPrediction() {
         </div>
       )}
 
-      {/* Column Schema Error */}
-      {validation && validation.missingColumns.length > 0 && (
-        <div className="bg-red-50 border border-red-200 p-6 rounded-2xl space-y-4 shadow-sm">
+      {/* Detailed Schema Error: Missing AND Unneeded Columns */}
+      {validation && (validation.missingColumns.length > 0 || validation.unneededColumns.length > 0) && (
+        <div className="bg-red-50 border border-red-200 p-6 rounded-2xl space-y-5 shadow-sm">
           <div className="flex gap-3">
             <XCircle className="h-6 w-6 text-[#DC2626] flex-shrink-0" />
             <div>
-              <h3 className="font-bold text-red-800">Missing Required Schema Headers</h3>
+              <h3 className="font-bold text-red-800 text-base">CSV Schema Mismatch Error</h3>
               <p className="text-red-700 text-sm mt-1 leading-relaxed">
-                The uploaded CSV is missing columns required by the predictive engine. Please resolve these headers:
+                The uploaded CSV does not match the required M-Pesa batch schema. Please resolve the column mismatches below:
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 pl-9">
-            {validation.missingColumns.map(col => (
-              <span key={col} className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-md font-bold">
-                {col}
-              </span>
-            ))}
-          </div>
+
+          {/* Missing Required Columns */}
+          {validation.missingColumns.length > 0 && (
+            <div className="pl-9 space-y-2">
+              <p className="text-xs font-bold text-red-900 uppercase tracking-wider">
+                ❌ Missing Required Columns (Must be added):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {validation.missingColumns.map(col => (
+                  <span key={col} className="text-xs bg-red-100 border border-red-300 text-red-800 px-2.5 py-1 rounded-md font-bold">
+                    + {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Unneeded / Extra Columns */}
+          {validation.unneededColumns.length > 0 && (
+            <div className="pl-9 space-y-2 border-t border-red-200/60 pt-3">
+              <p className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                ⚠️ Unneeded / Extra Columns (Should be removed from dataset):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {validation.unneededColumns.map(col => (
+                  <span key={col} className="text-xs bg-amber-100 border border-amber-300 text-amber-900 px-2.5 py-1 rounded-md font-bold">
+                    - {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pl-9 pt-2">
             <button
               onClick={() => setValidation(null)}
-              className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-xs shadow-sm transition-all"
+              className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-xs shadow-sm transition-all cursor-pointer"
             >
               Upload New CSV
             </button>
@@ -476,7 +491,15 @@ export default function BatchPrediction() {
       {/* Validation Summary State */}
       {validation && validation.missingColumns.length === 0 && !scoringActive && results.length === 0 && (
         <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-          <h2 className="text-xl font-bold text-gray-800">CSV Validation Report</h2>
+          <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+            <h2 className="text-xl font-bold text-gray-800">CSV Validation Report</h2>
+            {validation.formatDetected === "RAW_SYNTHETIC" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1B5E20] bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
+                <Sparkles className="h-4 w-4" />
+                <span>Raw Synthetic Format (Automated Feature Engineering Applied)</span>
+              </span>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Valid Rows Count */}
