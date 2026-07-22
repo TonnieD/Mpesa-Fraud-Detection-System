@@ -324,7 +324,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm font-bold text-[#1B5E20]">
                 {validationReport.formatDetected === "RAW_SYNTHETIC"
-                  ? "Raw Synthetic Dataset Detected — Automated Feature Engineering Applied"
+                  ? "Raw Synthetic Dataset Detected: Automated Feature Engineering Applied"
                   : "Clean Engineered Dataset Format Validated"
                 }
               </p>

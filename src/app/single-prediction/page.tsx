@@ -405,7 +405,7 @@ export default function SinglePrediction() {
                 <div className="bg-[#FAFAFA] border border-amber-200 p-4 rounded-xl flex gap-2.5 items-start text-left text-amber-800 text-xs animate-fade-in">
                   <Clock className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <p className="font-medium leading-relaxed">
-                    Our prediction engine is waking up — this may take up to 30 seconds on first request. Hang tight.
+                    Our prediction engine is waking up (this may take up to 30 seconds on first request). Hang tight.
                   </p>
                 </div>
               )}

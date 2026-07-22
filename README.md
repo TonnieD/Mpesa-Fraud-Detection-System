@@ -6,7 +6,7 @@ A real-time transaction fraud detection and prevention system built for the Keny
 
 ## Problem Statement
 
-M-Pesa processes **37.15 billion transactions annually**, with a total value of **KSh 38.29 trillion**. Conservative estimates place annual fraud losses at **KSh 2.3 billion (~$17.6M USD)** — approximately KSh 6.3 million stolen every single day.
+M-Pesa processes **37.15 billion transactions annually**, with a total value of **KSh 38.29 trillion**. Conservative estimates place annual fraud losses at **KSh 2.3 billion (~$17.6M USD)** (approximately KSh 6.3 million stolen every single day).
 
 Common attack vectors include SIM swaps, social engineering, fraudulent merchant transactions, number masking, and fake balance SMS traps.
 
@@ -18,9 +18,9 @@ Rather than logging fraud after the fact, this system sits **between transaction
 
 | Decision | Condition |
 |---|---|
-| `ALLOW` | Low fraud probability — transaction proceeds normally |
-| `CHALLENGE` | Elevated risk — OTP or user verification triggered |
-| `BLOCK` | High fraud probability or deterministic fraud signal — transaction halted before settlement |
+| `ALLOW` | Low fraud probability: transaction proceeds normally |
+| `CHALLENGE` | Elevated risk: OTP or user verification triggered |
+| `BLOCK` | High fraud probability or deterministic fraud signal: transaction halted before settlement |
 
 ---
 
@@ -29,48 +29,56 @@ Rather than logging fraud after the fact, this system sits **between transaction
 ```text
 Mpesa-Fraud-Detection-System/
 ├── Data/
-│   ├── mpesa_synthetic.csv — Raw dataset (120K synthetic M-Pesa transactions)
-│   ├── Feature_engineered.csv — Engineered dataset
-│   ├── training.csv — Training split (109,915 rows)
-│   └── evaluation.csv — Unseen evaluation set (10,000 rows)
+│   ├── mpesa_synthetic.csv: Raw dataset (120K synthetic M-Pesa transactions)
+│   ├── Feature_engineered.csv: Engineered dataset
+│   ├── training.csv: Training split (109,915 rows)
+│   └── evaluation.csv: Unseen evaluation set (10,000 rows)
 ├── inference/
 │   ├── models/
-│   │   ├── best_model.pkl — Trained XGBoost model (GridSearchCV tuned)
-│   │   └── encoder.pkl — Fitted ColumnTransformer encoder
+│   │   ├── best_model.pkl: Trained XGBoost model (GridSearchCV tuned)
+│   │   └── encoder.pkl: Fitted ColumnTransformer encoder
 │   ├── utils/
-│   │   ├── feature_engineering.py — Derives drain_rate, account_emptied, cyclic encoding
-│   │   └── preprocessing.py — Drops columns, maps device_type, applies encoder
-│   ├── main.py — FastAPI application
-│   ├── requirements.txt — Production dependencies
-│   ├── .env — Local environment variables (not pushed)
+│   │   ├── feature_engineering.py: Derives drain_rate, account_emptied, cyclic encoding
+│   │   └── preprocessing.py: Drops columns, maps device_type, applies encoder
+│   ├── main.py: FastAPI application
+│   ├── requirements.txt: Production dependencies
+│   ├── .env: Local environment variables (not pushed)
 │   └── .gitignore
+├── src/
+│   ├── app/
+│   │   ├── about/: Landing page & system specifications
+│   │   ├── dashboard/: Exploratory Data Analysis (EDA)
+│   │   ├── single-prediction/: Real-time transaction evaluator
+│   │   ├── batch-prediction/: Batch CSV scoring pipeline
+│   │   └── api/predict/: Next.js API proxy route handler
+│   ├── components/: Layout shell, navigation sidebar, loading skeletons
+│   └── utils/csvProcessor.ts: Automated feature engineering & CSV validation
 ├── Notebooks/
-│   ├── EDA.ipynb — Exploratory data analysis
-│   ├── feature_engineering.ipynb — Feature engineering pipeline
-│   └── modeling.ipynb — Model training, tuning, and evaluation
+│   ├── EDA.ipynb: Exploratory data analysis
+│   ├── feature_engineering.ipynb: Feature engineering pipeline
+│   └── modeling.ipynb: Model training, tuning, and evaluation
 ├── Reports/
-│   ├── transactions.pbix — Power BI dashboard
-│   ├── transactions.png — Transaction analysis dashboard
-│   └── fraud.png — Fraud analysis dashboard
-├── render.yaml — Render deployment configuration
+│   ├── transactions.pbix: Power BI dashboard
+│   ├── transactions.png: Transaction analysis dashboard
+│   └── fraud.png: Fraud analysis dashboard
+├── render.yaml: Render deployment configuration
 └── README.md
 ```
-
 
 ---
 
 ## ML Pipeline
 
 ### Data
-- **Source:** Synthetic M-Pesa fraud dataset — [Kaggle (calebboen)](https://www.kaggle.com/datasets/calebboen/mpesa-transactions-fraud)
+- **Source:** Synthetic M-Pesa fraud dataset: [Kaggle (calebboen)](https://www.kaggle.com/datasets/calebboen/mpesa-transactions-fraud)
 - **Size:** 120,000 transactions × 13 features
 - **Fraud rate:** 2.93% (class imbalanced)
 
 ### Feature Engineering
 | Feature | Description |
 |---|---|
-| `drain_rate` | `(amount / sender_balance_before) × 100` — primary fraud signal |
-| `account_emptied` | Binary flag — transaction amount >= sender balance |
+| `drain_rate` | `(amount / sender_balance_before) × 100` (primary fraud signal) |
+| `account_emptied` | Binary flag (`amount >= sender_balance_before`) |
 | `hour_sin/cos` | Cyclical encoding of hour (cycle length: 24) |
 | `day_sin/cos` | Cyclical encoding of day of week (cycle length: 7) |
 | `month_sin/cos` | Cyclical encoding of month (cycle length: 12) |
@@ -109,14 +117,25 @@ Evaluated against 10,000 completely unseen transactions with original 97/3 class
 
 Transactions are evaluated in two layers before a decision is returned:
 
-**Layer 1 — Hard Rules (deterministic, no model inference):**
+**Layer 1: Hard Rules (deterministic, no model inference):**
 - `drain_rate >= 100%` → immediate `BLOCK` (transaction exceeds available balance)
 - `account_emptied = 1` → immediate `BLOCK` (transaction empties sender account)
 
-**Layer 2 — Model Inference (probabilistic):**
+**Layer 2: Model Inference (probabilistic):**
 - `probability >= 0.502` → `BLOCK`
 - `probability >= 0.497` → `CHALLENGE`
 - `probability < 0.497` → `ALLOW`
+
+---
+
+## Web Application (UI/UX)
+
+The system includes a lightweight Next.js control panel and analyst workspace:
+
+- **About Landing Page (`/`):** System architecture overview, model card performance metrics, technology stack, and synthetic data limitations.
+- **Analytics Dashboard (`/dashboard`):** Exploratory Data Analysis (EDA) on the Training Dataset with interactive distribution charts (Recharts).
+- **Single Prediction (`/single-prediction`):** Form interface for real-time single transaction evaluation against rule gates and ML probabilities.
+- **Batch Prediction (`/batch-prediction`):** Concurrent CSV transaction scoring (max 1,000 rows per batch) with real-time decision tallies (`ALLOW`, `CHALLENGE`, `BLOCK`). Supports both raw synthetic M-Pesa CSVs (automated client feature engineering) and clean engineered CSVs.
 
 ---
 
@@ -174,9 +193,9 @@ Transactions are evaluated in two layers before a decision is returned:
 
 ## Known Limitations
 
-- Precision is stuck at 0.03 across all models — a consequence of the synthetic dataset's uniform fraud distribution. Only `drain_rate` and `account_emptied` carry genuine predictive signal.
+- Precision is stuck at 0.03 across all models (a consequence of the synthetic dataset's uniform fraud distribution). Only `drain_rate` and `account_emptied` carry genuine predictive signal.
 - SMOTE applied to synthetic data may inflate metrics beyond what is achievable on real M-Pesa transaction data.
-- Categorical inputs are case-sensitive and must match training data values exactly. Frontend should use constrained inputs (dropdowns) to prevent encoder errors.
+- Categorical inputs are case-sensitive and must match training data values exactly. Frontend uses constrained dropdown inputs to prevent encoder errors.
 - Model does not capture SIM swap fraud, agent float abuse, or number masking as explicit features.
 
 ---
@@ -187,10 +206,11 @@ Transactions are evaluated in two layers before a decision is returned:
 |---|---|
 | ML Framework | XGBoost, scikit-learn, imbalanced-learn |
 | API | FastAPI, Uvicorn |
+| Web Application | Next.js 14, React, Tailwind CSS |
 | Data Processing | Pandas, NumPy |
 | Model Serialisation | Joblib |
-| EDA & Visualisation | Power BI, Seaborn, Matplotlib |
-| Deployment | Render |
+| EDA & Visualisation | Power BI, Recharts, Seaborn, Matplotlib |
+| Deployment | Render, Vercel |
 
 ---
 
@@ -201,12 +221,12 @@ Transactions are evaluated in two layers before a decision is returned:
 - Extend to bank transaction channel with a `channel` feature
 - Build full preprocessing pipeline for raw-input-to-prediction in one call
 - Implement online learning for continuous model adaptation
-- Frontend dashboard for transaction monitoring and decisioning visualisation
+- Live carrier switch integration for direct network interception
 
 ---
 
 ## Author
 
-**Anthony Ng'ang'a Chege**
-Data Scientist & ML Engineer
+**Anthony Ng'ang'a Chege**  
+Data Scientist & ML Engineer  
 [Portfolio](https://anthonyngangachege.vercel.app) · [GitHub](https://github.com/TonnieD) · [LinkedIn](https://linkedin.com/in/anthony-nganga-chege)
