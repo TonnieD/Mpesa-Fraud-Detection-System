@@ -34,11 +34,14 @@ const capitalizeWord = (s: string) => {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 };
 
+const MAX_BATCH_ROWS = 1000;
+
 export default function BatchPrediction() {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [scoringProgress, setScoringProgress] = useState<{ current: number; total: number } | null>(null);
+  const [liveCounts, setLiveCounts] = useState({ allow: 0, challenge: 0, block: 0 });
   const [results, setResults] = useState<any[]>([]);
   const [scoringActive, setScoringActive] = useState(false);
   const [showColdStart, setShowColdStart] = useState(false);
@@ -82,6 +85,7 @@ export default function BatchPrediction() {
     setValidation(null);
     setResults([]);
     setScoringProgress(null);
+    setLiveCounts({ allow: 0, challenge: 0, block: 0 });
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -96,6 +100,11 @@ export default function BatchPrediction() {
             const rawRows = results.data as any[];
             if (rawRows.length === 0) {
               setError("CSV file contains no rows.");
+              return;
+            }
+
+            if (rawRows.length > MAX_BATCH_ROWS) {
+              setError(`Upload size limit exceeded: Upload size is restricted to a maximum of ${MAX_BATCH_ROWS.toLocaleString()} rows per batch (uploaded file contains ${rawRows.length.toLocaleString()} rows).`);
               return;
             }
 
@@ -259,6 +268,10 @@ export default function BatchPrediction() {
     let index = 0;
     let completed = 0;
 
+    let allowCount = 0;
+    let challengeCount = 0;
+    let blockCount = 0;
+
     // Cold start notification timer
     const coldStartTimer = setTimeout(() => {
       setShowColdStart(true);
@@ -304,7 +317,17 @@ export default function BatchPrediction() {
           };
         }
 
+        const rec = (scoredResults[currentIndex].recommended_action || "").toUpperCase();
+        if (rec === "ALLOW" || rec === "APPROVE") {
+          allowCount++;
+        } else if (rec === "CHALLENGE") {
+          challengeCount++;
+        } else {
+          blockCount++;
+        }
+
         completed++;
+        setLiveCounts({ allow: allowCount, challenge: challengeCount, block: blockCount });
         setScoringProgress({ current: completed, total: total });
       }
     };
@@ -392,6 +415,9 @@ export default function BatchPrediction() {
           <Upload className="h-12 w-12 text-gray-400 mb-4 stroke-[1.5]" />
           <h3 className="text-lg font-bold text-gray-700">Drag & drop your CSV file here</h3>
           <p className="text-sm text-gray-500 mt-1">or click to browse from explorer</p>
+          <span className="mt-2 inline-block text-xs font-bold text-[#1B5E20] bg-green-50 px-3 py-1 rounded-full border border-green-200">
+            Max size limit: 1,000 rows per batch
+          </span>
           
           <div className="mt-6 border-t border-gray-100 pt-4 w-full max-w-md text-left">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 text-center">Required Schema Fields</p>
@@ -533,15 +559,39 @@ export default function BatchPrediction() {
       {/* Progress state */}
       {scoringActive && scoringProgress && (
         <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-bold text-gray-800 text-lg">Batch Scoring in Progress</h3>
-              <p className="text-sm text-gray-400 font-medium mt-1">Concurrently fetching predictions...</p>
+              <p className="text-sm text-gray-400 font-medium mt-0.5">Concurrently evaluating predictions...</p>
             </div>
             <div className="text-right">
-              <span className="text-sm font-bold text-[#1B5E20]">
-                {scoringProgress.current} <span className="text-gray-400">/ {scoringProgress.total}</span>
+              <span className="text-lg font-black text-[#1B5E20]">
+                {scoringProgress.current} <span className="text-gray-400 font-medium text-sm">/ {scoringProgress.total} processed</span>
               </span>
+              <p className="text-xs text-gray-400 font-semibold mt-0.5">
+                {Math.round((scoringProgress.current / scoringProgress.total) * 100)}% Complete
+              </p>
+            </div>
+          </div>
+
+          {/* Decisions predicted so far live tally */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Decisions Predicted So Far</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-[#4CAF50]/10 border border-[#4CAF50]/20 rounded-xl text-center">
+                <p className="text-xs font-bold text-[#1B5E20] uppercase">ALLOW</p>
+                <p className="text-2xl font-black text-[#1B5E20] mt-1">{liveCounts.allow}</p>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                <p className="text-xs font-bold text-amber-800 uppercase">CHALLENGE</p>
+                <p className="text-2xl font-black text-amber-700 mt-1">{liveCounts.challenge}</p>
+              </div>
+
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center">
+                <p className="text-xs font-bold text-red-800 uppercase">BLOCK</p>
+                <p className="text-2xl font-black text-[#DC2626] mt-1">{liveCounts.block}</p>
+              </div>
             </div>
           </div>
 

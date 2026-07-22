@@ -31,8 +31,13 @@ export default function Sidebar({ onCollapseChange }: SidebarProps) {
 
   const navItems = [
     {
-      name: "Dashboard",
+      name: "About",
       href: "/",
+      icon: Info,
+    },
+    {
+      name: "Dashboard",
+      href: "/dashboard",
       icon: LayoutDashboard,
     },
     {
@@ -44,11 +49,6 @@ export default function Sidebar({ onCollapseChange }: SidebarProps) {
       name: "Batch Prediction",
       href: "/batch-prediction",
       icon: Files,
-    },
-    {
-      name: "About",
-      href: "/about",
-      icon: Info,
     },
   ];
 
@@ -85,11 +85,11 @@ export default function Sidebar({ onCollapseChange }: SidebarProps) {
         <nav className="flex-1 py-6 px-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href === "/" && pathname === "/about");
 
             return (
               <Link
-                key={item.href}
+                key={item.name}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 group
                   ${isActive 
