@@ -119,7 +119,7 @@ export default function Sidebar({ onCollapseChange }: SidebarProps) {
         {!isCollapsed ? (
           <div className="hidden md:block">
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Powered by</p>
-            <p className="text-sm text-[#4CAF50] font-semibold whitespace-nowrap">Safaricom ML Engine</p>
+            <p className="text-sm text-[#4CAF50] font-semibold whitespace-nowrap">Tuned XGBoost Model</p>
           </div>
         ) : (
           <div className="hidden md:flex justify-center">

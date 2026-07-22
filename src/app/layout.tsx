@@ -11,6 +11,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "M-Pesa Fraud Detection System",
   description: "Real-time M-Pesa transaction fraud scoring and dashboard analytics",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

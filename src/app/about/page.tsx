@@ -119,12 +119,15 @@ export default function AboutPage() {
         </Link>
       </div>
 
-      {/* Technical Overview */}
+      {/* Technical Overview & Interception Layer */}
       <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-        <h2 className="text-xl font-extrabold text-gray-800">System Architecture & Design</h2>
+        <h2 className="text-xl font-extrabold text-gray-800">System Architecture & Interception Layer</h2>
         <p className="text-sm text-gray-600 leading-relaxed font-medium">
-          The M-Pesa Fraud Detection System is a full-stack machine learning framework engineered to evaluate mobile money transfers before transaction completion. Combining tuned XGBoost gradient boosted decision trees with hard deterministic rule gates, the engine evaluates incoming transfer amounts, sender account balance drain ratios, location metadata, and temporal features to output decisions within low latency limits.
+          The system is specifically architected to sit <strong>between transaction initiation and transaction completion</strong> — intercepting payment requests before final settlement to evaluate risk in real time. Combining tuned XGBoost gradient boosted decision trees with hard deterministic rule gates, the engine evaluates incoming transfer amounts, sender account balance drain ratios, location metadata, and temporal features to issue an <strong>ALLOW</strong>, <strong>FLAG (CHALLENGE)</strong>, or <strong>BLOCK</strong> decision within low-latency bounds.
         </p>
+        <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-xl text-xs text-amber-900 leading-relaxed font-medium">
+          <strong>Note on Live Carrier Integration:</strong> In-flight transaction interception at the telecommunication switch layer is not yet implemented in production; this interface acts as a functional demonstration and analyst control panel for the scoring engine.
+        </div>
       </section>
 
       {/* Model Performance Card */}
